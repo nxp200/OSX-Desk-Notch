@@ -1,0 +1,42 @@
+## Build
+build/
+DerivedData/
+*.xcodeproj/
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+
+## Xcode user data
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+## Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+## CocoaPods / Carthage / SPM artifacts (not used here, kept for safety)
+Pods/
+Carthage/Build/
+
+## macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+## Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+## Notarization / signing artifacts
+*.p12
+*.cer
+*.provisionprofile
+*.zip
+*.dmg
+*.app
+ExportOptions.plist.local
