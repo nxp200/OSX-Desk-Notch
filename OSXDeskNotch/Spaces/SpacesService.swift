@@ -1,11 +1,10 @@
 //
 //  SpacesService.swift
 //
-//  Thin, defensively-coded wrapper around the private CGS Spaces SPI.
-//
-//  Everything that touches `CGSCopy*` / `CGSManagedDisplay*` is funneled
-//  through this file so the rest of the codebase never sees a raw CFArray.
-//  All public methods are safe to call from the main actor.
+//  Read-only wrapper around the private CGS Spaces SPI. We only use the
+//  SPI to *enumerate* spaces — switching is done by `SpaceSwitcher` via
+//  keystroke injection because the CGS switch SPI silently no-ops on
+//  several Sonoma builds.
 //
 
 import AppKit
@@ -13,14 +12,9 @@ import CoreGraphics
 
 @MainActor
 protocol SpacesProviding: AnyObject {
-    /// Fetches the current spaces for the display that currently owns the
-    /// menu bar. Returns `nil` if the SPI gave us something we can't parse.
+    /// Fetches the current spaces for the supplied screen. Returns `nil`
+    /// if the SPI gave us something we can't parse.
     func snapshot(for screen: NSScreen) -> DisplaySpaces?
-
-    /// Switches the supplied display to the supplied space. Returns
-    /// `false` if the call could not be issued (e.g. unknown display).
-    @discardableResult
-    func activate(spaceID: UInt64, on displayUUID: String) -> Bool
 }
 
 @MainActor
@@ -51,8 +45,10 @@ final class SpacesService: SpacesProviding {
         }
 
         let spaces: [Space] = rawSpaces.enumerated().compactMap { (index, dict) in
-            guard let rawID = (dict["ManagedSpaceID"] as? NSNumber)?.uint64Value
-            else { return nil }
+            // Prefer the 64-bit identifier when present (modern macOS).
+            let id64 = (dict["id64"] as? NSNumber)?.uint64Value
+            let managed = (dict["ManagedSpaceID"] as? NSNumber)?.uint64Value
+            guard let rawID = id64 ?? managed else { return nil }
             let typeRaw = (dict["type"] as? NSNumber)?.intValue ?? 0
             let kind: Space.Kind
             switch typeRaw {
@@ -72,14 +68,6 @@ final class SpacesService: SpacesProviding {
             spaces: spaces,
             currentSpaceID: current
         )
-    }
-
-    @discardableResult
-    func activate(spaceID: UInt64, on displayUUID: String) -> Bool {
-        CGSManagedDisplaySetCurrentSpace(
-            connection, displayUUID as CFString, spaceID
-        )
-        return true
     }
 
     /// Resolves the WindowServer display UUID for an `NSScreen`. CG returns

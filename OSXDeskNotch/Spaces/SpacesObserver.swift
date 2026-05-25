@@ -43,8 +43,31 @@ final class SpacesObserver: ObservableObject {
     }
 
     func activateSpace(_ space: Space) {
-        guard let snapshot = current else { return }
-        service.activate(spaceID: space.id, on: snapshot.displayUUID)
+        guard let snapshot = current,
+              let currentIndex = snapshot.spaces.firstIndex(where: {
+                  $0.id == snapshot.currentSpaceID
+              }),
+              let targetIndex = snapshot.spaces.firstIndex(where: {
+                  $0.id == space.id
+              })
+        else { return }
+
+        let delta = targetIndex - currentIndex
+        guard delta != 0 else { return }
+
+        // Inject Ctrl+Arrow `|delta|` times. We use the full spaces list
+        // (including any fullscreen spaces) because that's the order
+        // WindowServer paginates through with Ctrl+Arrow.
+        if !AccessibilityPermission.isGranted {
+            AccessibilityPermission.request()
+            return
+        }
+
+        let direction: SpaceSwitcher.Direction = delta > 0 ? .right : .left
+        let steps = abs(delta)
+        Task {
+            await SpaceSwitcher.step(direction, times: steps)
+        }
     }
 
     /// Take a snapshot of the currently visible space and cache it. Safe to

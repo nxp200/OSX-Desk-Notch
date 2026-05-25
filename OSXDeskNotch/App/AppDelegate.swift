@@ -16,10 +16,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.environment = env
         env.notchController.start()
         installStatusItem()
-        // Nudge the user for Screen Recording on first launch so previews work.
-        // No-op if already granted.
+        // Nudge for the two permissions we rely on. Both are no-ops if
+        // they've already been granted; both surface the standard macOS
+        // prompt on first launch.
         if !ScreenshotService.hasPermission() {
             ScreenshotService.requestPermission()
+        }
+        if !AccessibilityPermission.isGranted {
+            AccessibilityPermission.request()
         }
     }
 
@@ -56,13 +60,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let permissions = NSMenuItem(
+        let screenRecording = NSMenuItem(
             title: "Screen Recording Permission…",
             action: #selector(openScreenRecordingSettings),
             keyEquivalent: ""
         )
-        permissions.target = self
-        menu.addItem(permissions)
+        screenRecording.target = self
+        menu.addItem(screenRecording)
+
+        let accessibility = NSMenuItem(
+            title: "Accessibility Permission…",
+            action: #selector(openAccessibilitySettings),
+            keyEquivalent: ""
+        )
+        accessibility.target = self
+        menu.addItem(accessibility)
 
         menu.addItem(.separator())
 
@@ -93,5 +105,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let url {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    @objc private func openAccessibilitySettings() {
+        if !AccessibilityPermission.isGranted {
+            AccessibilityPermission.request()
+        }
+        AccessibilityPermission.openSettings()
     }
 }

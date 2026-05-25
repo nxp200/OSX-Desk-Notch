@@ -104,7 +104,7 @@ This is the bit you asked to be uncompromising about.
 | JIT / unsigned executable memory | Disabled in the entitlements file — `allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation` are all explicitly `false`. |
 | Network | Zero network entitlements (`network.client` / `network.server` = false). The app makes no HTTP requests. No telemetry, no analytics, no crash reporter. |
 | Camera / Mic | Explicitly disabled. |
-| Accessibility permission | **Not required.** Mouse position polling uses public `NSEvent.mouseLocation`, which needs no entitlement and no prompt. |
+| Accessibility | **Required for desktop switching on macOS 14.4+.** We inject `Ctrl+Left/Right` keystrokes via `CGEvent` to drive the WindowServer's own switch path — the same shortcut a user would press. This is more reliable than the private CGS switch SPI, which silently no-ops on several Sonoma builds. No other accessibility features are used. |
 | Input Monitoring | **Not required.** We never install a global event monitor for key/mouse events. |
 | Screen Recording | **Required for desktop previews.** Captures are taken via the public `CGWindowListCreateImage` whenever the active space changes. The cache is in-memory only — never written to disk, never transmitted. Granting is optional: deny it and the bar falls back to number-only tiles. |
 | Data at rest | None. No file I/O outside the app bundle. Screen previews live in RAM only and are dropped on quit. |
