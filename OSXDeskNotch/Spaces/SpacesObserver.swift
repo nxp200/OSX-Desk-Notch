@@ -43,30 +43,66 @@ final class SpacesObserver: ObservableObject {
     }
 
     func activateSpace(_ space: Space) {
-        guard let snapshot = current,
-              let currentIndex = snapshot.spaces.firstIndex(where: {
-                  $0.id == snapshot.currentSpaceID
-              }),
-              let targetIndex = snapshot.spaces.firstIndex(where: {
-                  $0.id == space.id
-              })
-        else { return }
+        guard let snapshot = current else {
+            Diagnostics.switcher.error("activate called with no snapshot")
+            return
+        }
+        guard let currentIndex = snapshot.spaces.firstIndex(where: {
+            $0.id == snapshot.currentSpaceID
+        }) else {
+            Diagnostics.switcher.error(
+                "current space \(snapshot.currentSpaceID) not in spaces list"
+            )
+            return
+        }
+        guard let targetIndex = snapshot.spaces.firstIndex(where: {
+            $0.id == space.id
+        }) else {
+            Diagnostics.switcher.error("target space \(space.id) not in spaces list")
+            return
+        }
 
         let delta = targetIndex - currentIndex
         guard delta != 0 else { return }
 
-        // Inject Ctrl+Arrow `|delta|` times. We use the full spaces list
-        // (including any fullscreen spaces) because that's the order
-        // WindowServer paginates through with Ctrl+Arrow.
         if !AccessibilityPermission.isGranted {
-            AccessibilityPermission.request()
+            Diagnostics.permissions.error(
+                "Accessibility not granted; cannot switch spaces"
+            )
+            showAccessibilityRequiredAlert()
             return
         }
 
         let direction: SpaceSwitcher.Direction = delta > 0 ? .right : .left
         let steps = abs(delta)
+        Diagnostics.switcher.info(
+            "switching \(steps) steps \(delta > 0 ? "right" : "left", privacy: .public)"
+        )
         Task {
             await SpaceSwitcher.step(direction, times: steps)
+        }
+    }
+
+    private func showAccessibilityRequiredAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Accessibility access required"
+        alert.informativeText = """
+            OSX Desk Notch needs Accessibility access to switch desktops. \
+            It does this by sending the same Control + Arrow keystroke that \
+            you would press yourself — nothing more.
+
+            Open System Settings → Privacy & Security → Accessibility, \
+            enable OSX Desk Notch, then quit and reopen this app for the \
+            change to take effect.
+            """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Cancel")
+
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            AccessibilityPermission.openSettings()
         }
     }
 

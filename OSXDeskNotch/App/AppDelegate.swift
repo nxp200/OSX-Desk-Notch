@@ -6,19 +6,21 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var environment: AppEnvironment?
     private var statusItem: NSStatusItem?
+    private var screenRecordingItem: NSMenuItem?
+    private var accessibilityItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let env = AppEnvironment()
         self.environment = env
         env.notchController.start()
         installStatusItem()
-        // Nudge for the two permissions we rely on. Both are no-ops if
-        // they've already been granted; both surface the standard macOS
-        // prompt on first launch.
+
+        // Both permissions are no-ops if already granted; both surface the
+        // standard macOS prompt on first launch.
         if !ScreenshotService.hasPermission() {
             ScreenshotService.requestPermission()
         }
@@ -38,7 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Status item
 
     private func installStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let item = NSStatusBar.system.statusItem(
+            withLength: NSStatusItem.variableLength
+        )
         if let button = item.button {
             let image = NSImage(
                 systemSymbolName: "rectangle.3.group",
@@ -49,6 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+        menu.delegate = self
+        menu.autoenablesItems = false
 
         let about = NSMenuItem(
             title: "About OSX Desk Notch",
@@ -60,21 +66,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let screenRecording = NSMenuItem(
-            title: "Screen Recording Permission…",
+        let sr = NSMenuItem(
+            title: "Screen Recording…",
             action: #selector(openScreenRecordingSettings),
             keyEquivalent: ""
         )
-        screenRecording.target = self
-        menu.addItem(screenRecording)
+        sr.target = self
+        menu.addItem(sr)
+        screenRecordingItem = sr
 
-        let accessibility = NSMenuItem(
-            title: "Accessibility Permission…",
+        let ax = NSMenuItem(
+            title: "Accessibility…",
             action: #selector(openAccessibilitySettings),
             keyEquivalent: ""
         )
-        accessibility.target = self
-        menu.addItem(accessibility)
+        ax.target = self
+        menu.addItem(ax)
+        accessibilityItem = ax
 
         menu.addItem(.separator())
 
@@ -89,6 +97,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.statusItem = item
     }
 
+    // MARK: - NSMenuDelegate
+
+    func menuWillOpen(_ menu: NSMenu) {
+        refreshPermissionTitles()
+    }
+
+    private func refreshPermissionTitles() {
+        let sr = ScreenshotService.hasPermission()
+        screenRecordingItem?.title = sr
+            ? "Screen Recording ✓"
+            : "Screen Recording — not granted…"
+
+        let ax = AccessibilityPermission.isGranted
+        accessibilityItem?.title = ax
+            ? "Accessibility ✓"
+            : "Accessibility — not granted…"
+    }
+
+    // MARK: - Actions
+
     @objc private func showAbout() {
         NSApp.orderFrontStandardAboutPanel(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -96,7 +124,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openScreenRecordingSettings() {
         if !ScreenshotService.hasPermission() {
-            // First nudge — triggers the OS prompt if it hasn't already.
             ScreenshotService.requestPermission()
         }
         let url = URL(

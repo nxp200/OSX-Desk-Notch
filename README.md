@@ -15,7 +15,7 @@ current desktops; click one to jump to it.
 
 | | |
 |---|---|
-| OS | macOS 13 Ventura or later |
+| OS | macOS 14 Sonoma or later |
 | Hardware | MacBook Pro 14"/16" (2021+) or MacBook Air 13"/15" (2022+) — anything with a notch |
 | Tooling | Xcode 15+, [`xcodegen`](https://github.com/yonaskolb/XcodeGen) |
 
@@ -106,7 +106,7 @@ This is the bit you asked to be uncompromising about.
 | Camera / Mic | Explicitly disabled. |
 | Accessibility | **Required for desktop switching on macOS 14.4+.** We inject `Ctrl+Left/Right` keystrokes via `CGEvent` to drive the WindowServer's own switch path — the same shortcut a user would press. This is more reliable than the private CGS switch SPI, which silently no-ops on several Sonoma builds. No other accessibility features are used. |
 | Input Monitoring | **Not required.** We never install a global event monitor for key/mouse events. |
-| Screen Recording | **Required for desktop previews.** Captures are taken via the public `CGWindowListCreateImage` whenever the active space changes. The cache is in-memory only — never written to disk, never transmitted. Granting is optional: deny it and the bar falls back to number-only tiles. |
+| Screen Recording | **Required for desktop previews.** Uses `SCScreenshotManager` (ScreenCaptureKit) with our own app excluded from the frame. The cache is in-memory only — never written to disk, never transmitted. Granting is optional: deny it and the bar falls back to number-only tiles. |
 | Data at rest | None. No file I/O outside the app bundle. Screen previews live in RAM only and are dropped on quit. |
 | Code signing | Developer ID + notarization. Hardened Runtime mandatory; library validation kept on. |
 | Private API usage | Confined to one file. The four symbols we use are listed in `Resources/CGSPrivate.h` with explanatory comments. |
