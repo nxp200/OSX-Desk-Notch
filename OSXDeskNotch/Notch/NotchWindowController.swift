@@ -153,6 +153,7 @@ final class NotchWindowController {
         isExpanded = true
         spaces.refresh()
         updateHoverZone()
+        window?.ignoresMouseEvents = false
         animateAlpha(to: 1, duration: 0.18)
     }
 
@@ -160,7 +161,13 @@ final class NotchWindowController {
         guard isExpanded else { return }
         isExpanded = false
         updateHoverZone()
+        window?.ignoresMouseEvents = true
         animateAlpha(to: 0, duration: 0.22)
+        // The bar is now fading away; once it's fully invisible, snap a
+        // fresh capture of whatever desktop is currently visible. This is
+        // what keeps the "current" tile up-to-date even when the user
+        // switched via a keyboard shortcut and never triggered the bar.
+        spaces.captureCurrentIfPossible(after: 0.35)
     }
 
     private func scheduleHide() {

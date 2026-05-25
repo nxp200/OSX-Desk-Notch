@@ -49,11 +49,15 @@ final class SpacesObserver: ObservableObject {
 
     /// Take a snapshot of the currently visible space and cache it. Safe to
     /// call any time; will be a no-op if Screen Recording isn't authorised.
-    func captureCurrentIfPossible() {
+    /// The optional `after` delay lets the caller wait for transitions or
+    /// fades to finish before the screenshot is taken.
+    func captureCurrentIfPossible(after delay: TimeInterval = 0.30) {
         guard let screen = bestScreen(),
               let snapshot = current ?? service.snapshot(for: screen)
         else { return }
-        previews.scheduleCapture(for: snapshot.currentSpaceID, on: screen)
+        previews.scheduleCapture(
+            for: snapshot.currentSpaceID, on: screen, delay: delay
+        )
     }
 
     // MARK: - Private
@@ -71,7 +75,10 @@ final class SpacesObserver: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.refresh()
-                self?.captureCurrentIfPossible()
+                // 0.6s gives the WindowServer space-switch animation enough
+                // time to land — capturing earlier sometimes snapped the
+                // outgoing desktop and mis-filed it under the new space.
+                self?.captureCurrentIfPossible(after: 0.6)
             }
         }
         observers.append(token)

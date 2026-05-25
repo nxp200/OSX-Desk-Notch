@@ -23,7 +23,10 @@ final class NotchWindow: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
-        ignoresMouseEvents = false
+        // Start collapsed → invisible to clicks. The controller flips this
+        // off as soon as the bar expands so the SwiftUI tiles can receive
+        // mouse events, then back on when the bar collapses.
+        ignoresMouseEvents = true
         isMovable = false
         isMovableByWindowBackground = false
         hidesOnDeactivate = false
