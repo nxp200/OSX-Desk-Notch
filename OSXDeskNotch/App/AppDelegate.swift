@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var environment: AppEnvironment?
     private var statusItem: NSStatusItem?
     private var screenRecordingItem: NSMenuItem?
+    private var automationItem: NSMenuItem?
     private var accessibilityItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -19,13 +20,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         env.notchController.start()
         installStatusItem()
 
-        // Both permissions are no-ops if already granted; both surface the
-        // standard macOS prompt on first launch.
+        // Screen Recording is the only permission that benefits from an
+        // early prompt — previews need it before the user has ever
+        // clicked anything. Automation gets prompted lazily, the first
+        // time the user actually triggers a switch.
         if !ScreenshotService.hasPermission() {
             ScreenshotService.requestPermission()
-        }
-        if !AccessibilityPermission.isGranted {
-            AccessibilityPermission.request()
         }
     }
 
@@ -75,8 +75,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(sr)
         screenRecordingItem = sr
 
+        let auto = NSMenuItem(
+            title: "Automation…",
+            action: #selector(openAutomationSettings),
+            keyEquivalent: ""
+        )
+        auto.target = self
+        menu.addItem(auto)
+        automationItem = auto
+
         let ax = NSMenuItem(
-            title: "Accessibility…",
+            title: "Accessibility (fallback)…",
             action: #selector(openAccessibilitySettings),
             keyEquivalent: ""
         )
@@ -109,10 +118,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ? "Screen Recording ✓"
             : "Screen Recording — not granted…"
 
+        // Automation status is per-target; we ask about System Events
+        // specifically because that's what we use for switching.
+        let automation = AutomationPermission.statusForSystemEvents()
+        switch automation {
+        case .granted:
+            automationItem?.title = "Automation (System Events) ✓"
+        case .denied:
+            automationItem?.title = "Automation (System Events) — denied…"
+        case .notDetermined:
+            automationItem?.title = "Automation (System Events) — not asked…"
+        }
+
         let ax = AccessibilityPermission.isGranted
         accessibilityItem?.title = ax
-            ? "Accessibility ✓"
-            : "Accessibility — not granted…"
+            ? "Accessibility (fallback) ✓"
+            : "Accessibility (fallback) — not granted…"
     }
 
     // MARK: - Actions
@@ -139,5 +160,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             AccessibilityPermission.request()
         }
         AccessibilityPermission.openSettings()
+    }
+
+    @objc private func openAutomationSettings() {
+        let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+        )
+        if let url {
+            NSWorkspace.shared.open(url)
+        }
     }
 }

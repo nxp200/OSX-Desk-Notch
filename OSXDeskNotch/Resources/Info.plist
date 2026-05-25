@@ -36,5 +36,7 @@
     <true/>
     <key>NSRequiresAquaSystemAppearance</key>
     <false/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>OSX Desk Notch uses System Events to send the same Control+Arrow keystroke you would press yourself, so it can switch macOS desktops on your behalf.</string>
 </dict>
 </plist>

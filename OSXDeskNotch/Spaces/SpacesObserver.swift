@@ -65,44 +65,46 @@ final class SpacesObserver: ObservableObject {
         let delta = targetIndex - currentIndex
         guard delta != 0 else { return }
 
-        if !AccessibilityPermission.isGranted {
-            Diagnostics.permissions.error(
-                "Accessibility not granted; cannot switch spaces"
-            )
-            showAccessibilityRequiredAlert()
-            return
-        }
-
         let direction: SpaceSwitcher.Direction = delta > 0 ? .right : .left
         let steps = abs(delta)
         Diagnostics.switcher.info(
-            "switching \(steps) steps \(delta > 0 ? "right" : "left", privacy: .public)"
+            "request: \(steps) steps \(delta > 0 ? "right" : "left", privacy: .public)"
         )
-        Task {
-            await SpaceSwitcher.step(direction, times: steps)
+
+        Task { [weak self] in
+            let ok = await SpaceSwitcher.step(direction, times: steps)
+            if !ok {
+                self?.showSwitchPermissionAlert()
+            }
         }
     }
 
-    private func showAccessibilityRequiredAlert() {
+    private func showSwitchPermissionAlert() {
         let alert = NSAlert()
-        alert.messageText = "Accessibility access required"
+        alert.messageText = "Allow OSX Desk Notch to switch desktops"
         alert.informativeText = """
-            OSX Desk Notch needs Accessibility access to switch desktops. \
-            It does this by sending the same Control + Arrow keystroke that \
-            you would press yourself — nothing more.
+            macOS needs to authorise the keystroke OSX Desk Notch uses \
+            (Control + Arrow). When you click "Try Again", a system \
+            prompt will appear asking you to allow control of \
+            "System Events" — choose Allow.
 
-            Open System Settings → Privacy & Security → Accessibility, \
-            enable OSX Desk Notch, then quit and reopen this app for the \
-            change to take effect.
+            If you previously denied that prompt, open \
+            System Settings → Privacy & Security → Automation and enable \
+            "System Events" under OSX Desk Notch.
             """
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Open Automation Settings")
         alert.addButton(withTitle: "Cancel")
 
         NSApp.activate(ignoringOtherApps: true)
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
-            AccessibilityPermission.openSettings()
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+            )
+            if let url {
+                NSWorkspace.shared.open(url)
+            }
         }
     }
 
