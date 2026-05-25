@@ -7,15 +7,15 @@ import SwiftUI
 struct NotchBarView: View {
 
     @ObservedObject var spaces: SpacesObserver
+    @ObservedObject var previews: SpacePreviewStore
     let onSelect: (Space) -> Void
 
-    @Environment(\.notchWidth) private var notchWidth
-
     var body: some View {
-        VStack {
+        VStack(spacing: 0) {
+            Spacer().frame(height: Theme.barTopMargin)
             content
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.horizontal, Theme.barInnerPaddingH)
+                .padding(.vertical, Theme.barInnerPaddingV)
                 .background(barBackground)
                 .clipShape(
                     RoundedRectangle(cornerRadius: Theme.barCornerRadius,
@@ -26,8 +26,8 @@ struct NotchBarView: View {
                                      style: .continuous)
                         .stroke(Theme.barStroke, lineWidth: 1)
                 )
-                .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 6)
-                .padding(.top, 4)
+                .shadow(color: .black.opacity(0.38),
+                        radius: 18, x: 0, y: 6)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -40,7 +40,8 @@ struct NotchBarView: View {
                 ForEach(snapshot.userSpaces) { space in
                     SpaceTileView(
                         space: space,
-                        isCurrent: snapshot.currentSpaceID == space.id
+                        isCurrent: snapshot.currentSpaceID == space.id,
+                        preview: previews.image(for: space.id)
                     ) {
                         onSelect(space)
                     }

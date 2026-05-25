@@ -5,10 +5,11 @@
 //    * the transparent panel
 //    * the SwiftUI host
 //    * the hover monitor
-//    * the geometry recomputation when displays change
+//    * the geometry recomputation when displays or space data change
 //
 
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -20,6 +21,7 @@ final class NotchWindowController {
     private var geometry: NotchGeometry?
     private var hideWorkItem: DispatchWorkItem?
     private var displayObserver: NSObjectProtocol?
+    private var cancellables = Set<AnyCancellable>()
 
     private var isExpanded = false
 
@@ -30,6 +32,7 @@ final class NotchWindowController {
     func start() {
         installWindow()
         installDisplayObserver()
+        subscribeToSpaceChanges()
         monitor.onTransition = { [weak self] state in
             self?.handleHover(state)
         }
@@ -40,6 +43,7 @@ final class NotchWindowController {
         monitor.stop()
         window?.orderOut(nil)
         window = nil
+        cancellables.removeAll()
         if let displayObserver {
             NotificationCenter.default.removeObserver(displayObserver)
             self.displayObserver = nil
@@ -51,14 +55,21 @@ final class NotchWindowController {
     private func installWindow() {
         guard let screen = NSScreen.screens.first(where: { $0.hasNotch })
                 ?? NSScreen.main else { return }
-        guard let geometry = NotchGeometry.compute(for: screen) else { return }
+        let tileCount = spaces.current?.userSpaces.count ?? 0
+        guard let geometry = NotchGeometry.compute(
+            for: screen, tileCount: tileCount
+        ) else { return }
         self.geometry = geometry
 
         let window = NotchWindow(contentRect: geometry.barRect)
         let host = NSHostingView(
-            rootView: NotchBarView(spaces: spaces) { [weak self] space in
-                self?.handleSelection(space)
-            }
+            rootView: NotchBarView(
+                spaces: spaces,
+                previews: spaces.previews,
+                onSelect: { [weak self] space in
+                    self?.handleSelection(space)
+                }
+            )
             .environment(\.notchWidth, geometry.notchRect.width)
         )
         host.frame = NSRect(origin: .zero, size: geometry.barRect.size)
@@ -69,7 +80,7 @@ final class NotchWindowController {
         window.orderFrontRegardless()
         self.window = window
 
-        monitor.hotZone = geometry.notchRect
+        updateHoverZone()
     }
 
     private func installDisplayObserver() {
@@ -85,14 +96,44 @@ final class NotchWindowController {
         }
     }
 
+    private func subscribeToSpaceChanges() {
+        spaces.$current
+            .removeDuplicates { $0?.userSpaces.count == $1?.userSpaces.count }
+            .sink { [weak self] _ in
+                self?.resizeForCurrentData()
+            }
+            .store(in: &cancellables)
+    }
+
     private func reinstallForCurrentScreens() {
         stop()
         installWindow()
         installDisplayObserver()
+        subscribeToSpaceChanges()
         monitor.onTransition = { [weak self] state in
             self?.handleHover(state)
         }
         monitor.start()
+    }
+
+    /// Recompute geometry for the current tile count and resize the window
+    /// in place, animating the resize so the bar grows/shrinks smoothly.
+    private func resizeForCurrentData() {
+        guard let window,
+              let screen = NSScreen.screens.first(where: { $0.hasNotch })
+                ?? NSScreen.main else { return }
+        let tileCount = spaces.current?.userSpaces.count ?? 0
+        guard let geometry = NotchGeometry.compute(
+            for: screen, tileCount: tileCount
+        ) else { return }
+        self.geometry = geometry
+        window.setFrame(geometry.barRect, display: true, animate: isExpanded)
+        updateHoverZone()
+    }
+
+    private func updateHoverZone() {
+        guard let geometry else { return }
+        monitor.hotZone = isExpanded ? geometry.hoverZone : geometry.notchRect
     }
 
     // MARK: - Hover
@@ -108,17 +149,17 @@ final class NotchWindowController {
     }
 
     private func expand() {
-        guard let geometry, !isExpanded else { return }
+        guard !isExpanded else { return }
         isExpanded = true
-        monitor.hotZone = geometry.hoverZone
         spaces.refresh()
+        updateHoverZone()
         animateAlpha(to: 1, duration: 0.18)
     }
 
     private func collapse() {
-        guard let geometry, isExpanded else { return }
+        guard isExpanded else { return }
         isExpanded = false
-        monitor.hotZone = geometry.notchRect
+        updateHoverZone()
         animateAlpha(to: 0, duration: 0.22)
     }
 

@@ -13,18 +13,23 @@ struct NotchGeometry: Equatable {
     /// (origin at bottom-left of the primary display, AppKit conventions).
     let notchRect: CGRect
 
-    /// Suggested rectangle for the expanded hover bar — a strip directly
-    /// under the notch, slightly wider than the notch itself.
+    /// Rectangle for the expanded hover bar, sized to actual content and
+    /// centred under the notch.
     let barRect: CGRect
 
     /// Rectangle of the screen this geometry was computed for.
     let screenFrame: CGRect
 
-    /// Returns geometry for the supplied screen, or `nil` if the screen has
-    /// no notch (either an external display, or an older MacBook).
+    /// Geometry for the notch + a closed bar (zero tile count). Use this
+    /// for the initial hover hot-zone before any space data is loaded.
+    static func compute(for screen: NSScreen) -> NotchGeometry? {
+        compute(for: screen, tileCount: 0)
+    }
+
+    /// Geometry sized for the supplied number of tiles. Returns nil for
+    /// screens without a notch.
     static func compute(for screen: NSScreen,
-                        barHeight: CGFloat = 64,
-                        barHorizontalPadding: CGFloat = 24) -> NotchGeometry? {
+                        tileCount: Int) -> NotchGeometry? {
         let inset = screen.safeAreaInsets.top
         guard inset > 0 else { return nil }
 
@@ -40,8 +45,6 @@ struct NotchGeometry: Equatable {
         let rightEdge: CGFloat = screen.auxiliaryTopRightArea?.minX
             ?? (screenFrame.midX + fallbackHalfWidth)
 
-        // AppKit's screen coordinates put the origin at bottom-left, so the
-        // top of the screen is `maxY`. The notch occupies the topmost strip.
         let notchTop = screenFrame.maxY
         let notchBottom = notchTop - menuBarHeight
         let notchRect = CGRect(
@@ -51,12 +54,16 @@ struct NotchGeometry: Equatable {
             height: menuBarHeight
         )
 
-        // Bar sits just below the menu bar, centred under the notch, with
-        // some horizontal breathing room on each side.
-        let barWidth = notchRect.width + barHorizontalPadding * 2
+        // Bar: sized to content (or matches notch width if no tiles yet).
+        let contentWidth = tileCount > 0
+            ? Theme.barWidth(forTileCount: tileCount)
+            : notchRect.width
+        let barWidth = max(contentWidth, notchRect.width)
+        let barHeight = Theme.barTotalHeight
         let barX = notchRect.midX - barWidth / 2
         let barY = notchBottom - barHeight
-        let barRect = CGRect(x: barX, y: barY, width: barWidth, height: barHeight)
+        let barRect = CGRect(x: barX, y: barY,
+                             width: barWidth, height: barHeight)
 
         return NotchGeometry(
             notchRect: notchRect,

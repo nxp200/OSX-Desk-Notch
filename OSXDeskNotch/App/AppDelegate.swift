@@ -16,6 +16,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.environment = env
         env.notchController.start()
         installStatusItem()
+        // Nudge the user for Screen Recording on first launch so previews work.
+        // No-op if already granted.
+        if !ScreenshotService.hasPermission() {
+            ScreenshotService.requestPermission()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -38,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             image?.isTemplate = true
             button.image = image
         }
+
         let menu = NSMenu()
 
         let about = NSMenuItem(
@@ -47,6 +53,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         about.target = self
         menu.addItem(about)
+
+        menu.addItem(.separator())
+
+        let permissions = NSMenuItem(
+            title: "Screen Recording Permission…",
+            action: #selector(openScreenRecordingSettings),
+            keyEquivalent: ""
+        )
+        permissions.target = self
+        menu.addItem(permissions)
 
         menu.addItem(.separator())
 
@@ -64,5 +80,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout() {
         NSApp.orderFrontStandardAboutPanel(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func openScreenRecordingSettings() {
+        if !ScreenshotService.hasPermission() {
+            // First nudge — triggers the OS prompt if it hasn't already.
+            ScreenshotService.requestPermission()
+        }
+        let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        )
+        if let url {
+            NSWorkspace.shared.open(url)
+        }
     }
 }

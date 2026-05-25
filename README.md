@@ -106,7 +106,8 @@ This is the bit you asked to be uncompromising about.
 | Camera / Mic | Explicitly disabled. |
 | Accessibility permission | **Not required.** Mouse position polling uses public `NSEvent.mouseLocation`, which needs no entitlement and no prompt. |
 | Input Monitoring | **Not required.** We never install a global event monitor for key/mouse events. |
-| Data at rest | None. No file I/O outside the app bundle. No `UserDefaults` writes today (preferences are room for a future PR). |
+| Screen Recording | **Required for desktop previews.** Captures are taken via the public `CGWindowListCreateImage` whenever the active space changes. The cache is in-memory only — never written to disk, never transmitted. Granting is optional: deny it and the bar falls back to number-only tiles. |
+| Data at rest | None. No file I/O outside the app bundle. Screen previews live in RAM only and are dropped on quit. |
 | Code signing | Developer ID + notarization. Hardened Runtime mandatory; library validation kept on. |
 | Private API usage | Confined to one file. The four symbols we use are listed in `Resources/CGSPrivate.h` with explanatory comments. |
 | Memory safety | Swift's default. No `Unmanaged.passUnretained` shenanigans; all CF bridging is explicit and Swift-checked. |

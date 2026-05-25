@@ -26,4 +26,13 @@ final class NotchGeometryTests: XCTestCase {
         let notch = CGRect(x: 700, y: 1000, width: 200, height: 32)
         XCTAssertGreaterThanOrEqual(notch.width, 0)
     }
+
+    func testBarWidthScalesWithTileCount() {
+        let one = Theme.barWidth(forTileCount: 1)
+        let five = Theme.barWidth(forTileCount: 5)
+        XCTAssertGreaterThan(five, one)
+        // Five tiles should be roughly four extra (tile + spacing) widths.
+        let expectedDelta = 4 * (Theme.tileSize.width + Theme.tileSpacing)
+        XCTAssertEqual(five - one, expectedDelta, accuracy: 0.5)
+    }
 }
