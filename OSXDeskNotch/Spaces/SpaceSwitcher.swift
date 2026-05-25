@@ -26,6 +26,18 @@ import Foundation
 @MainActor
 enum SpaceSwitcher {
 
+    enum Outcome: Equatable {
+        /// One of the switch paths reported success.
+        case success
+        /// We reached System Events but it (or CGEvent) refused the keystroke
+        /// because the calling process isn't in the Accessibility allow-list.
+        /// Most common dev-build cause: stale TCC entry after a rebuild.
+        case needsAccessibility
+        /// We couldn't even talk to System Events — Automation permission was
+        /// denied or never asked.
+        case needsAutomation
+    }
+
     enum Direction {
         case left, right
 
@@ -44,34 +56,32 @@ enum SpaceSwitcher {
         }
     }
 
-    /// Steps the visible space `times` times in `direction`. Returns true
-    /// if a switch path was successfully invoked; false if neither
-    /// Automation nor Accessibility is available.
-    @discardableResult
+    /// Steps the visible space `times` times in `direction`. Returns the
+    /// classified outcome so callers can surface the right alert.
     static func step(_ direction: Direction,
                      times: Int,
-                     stepDelay: TimeInterval = 0.22) async -> Bool {
-        guard times > 0 else { return false }
+                     stepDelay: TimeInterval = 0.22) async -> Outcome {
+        guard times > 0 else { return .success }
 
-        // Primary: AppleScript → System Events (Automation permission).
-        if await runAppleScriptPath(
+        // Primary: AppleScript → System Events.
+        let asOutcome = await runAppleScriptPath(
             direction: direction, times: times, stepDelay: stepDelay
-        ) {
-            return true
-        }
+        )
+        if asOutcome == .success { return .success }
 
-        // Fallback: CGEvent injection (Accessibility permission).
+        // Fallback: CGEvent — same Accessibility requirement, but worth a
+        // shot in case Automation was the only thing missing.
         if AccessibilityPermission.isGranted {
             await runCGEventPath(
                 direction: direction, times: times, stepDelay: stepDelay
             )
-            return true
+            return .success
         }
 
         Diagnostics.switcher.error(
-            "no switch path available — Automation denied and Accessibility not granted"
+            "no switch path available — \(String(describing: asOutcome), privacy: .public)"
         )
-        return false
+        return asOutcome
     }
 
     // MARK: - Path 1: AppleScript / Automation
@@ -80,10 +90,13 @@ enum SpaceSwitcher {
         direction: Direction,
         times: Int,
         stepDelay: TimeInterval
-    ) async -> Bool {
+    ) async -> Outcome {
         let key = direction.appleScriptKeyCode
         for i in 0..<times {
-            guard await dispatchAppleScript(keyCode: key) else { return false }
+            let errorCode = await dispatchAppleScript(keyCode: key)
+            if errorCode != 0 {
+                return classify(appleScriptError: errorCode)
+            }
             if i < times - 1 {
                 try? await Task.sleep(
                     nanoseconds: UInt64(stepDelay * 1_000_000_000)
@@ -93,36 +106,50 @@ enum SpaceSwitcher {
         Diagnostics.switcher.info(
             "AppleScript path switched \(times) step(s) \(direction == .right ? "right" : "left", privacy: .public)"
         )
-        return true
+        return .success
+    }
+
+    private static func classify(appleScriptError code: Int) -> Outcome {
+        switch code {
+        case 1002:
+            // "System Events got an error: <app> is not allowed to send
+            // keystrokes." → System Events demands Accessibility.
+            return .needsAccessibility
+        case -1743:
+            // errAEEventNotPermitted → user denied the Automation prompt.
+            return .needsAutomation
+        default:
+            return .needsAccessibility
+        }
     }
 
     /// Executes the AppleScript on a background queue so we don't block
     /// the main actor during the round-trip to System Events. Returns
-    /// false on any error (we log the code/message via os.Logger).
-    private static func dispatchAppleScript(keyCode: Int) async -> Bool {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+    /// 0 on success, otherwise the AppleScript error number.
+    private static func dispatchAppleScript(keyCode: Int) async -> Int {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Int, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
                 let source = """
                 tell application "System Events" to key code \(keyCode) using control down
                 """
                 guard let script = NSAppleScript(source: source) else {
                     Diagnostics.switcher.error("NSAppleScript init failed")
-                    continuation.resume(returning: false)
+                    continuation.resume(returning: -1)
                     return
                 }
                 var errorInfo: NSDictionary?
                 _ = script.executeAndReturnError(&errorInfo)
                 if let errorInfo {
-                    let code = (errorInfo["NSAppleScriptErrorNumber"] as? Int) ?? 0
+                    let code = (errorInfo["NSAppleScriptErrorNumber"] as? Int) ?? -1
                     let message = (errorInfo["NSAppleScriptErrorMessage"] as? String)
                         ?? "(no message)"
                     Diagnostics.switcher.error(
                         "AppleScript error \(code): \(message, privacy: .public)"
                     )
-                    continuation.resume(returning: false)
+                    continuation.resume(returning: code)
                     return
                 }
-                continuation.resume(returning: true)
+                continuation.resume(returning: 0)
             }
         }
     }

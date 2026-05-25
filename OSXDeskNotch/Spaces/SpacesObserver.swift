@@ -72,25 +72,71 @@ final class SpacesObserver: ObservableObject {
         )
 
         Task { [weak self] in
-            let ok = await SpaceSwitcher.step(direction, times: steps)
-            if !ok {
-                self?.showSwitchPermissionAlert()
+            let outcome = await SpaceSwitcher.step(direction, times: steps)
+            switch outcome {
+            case .success:
+                break
+            case .needsAccessibility:
+                self?.showAccessibilityRequiredAlert()
+            case .needsAutomation:
+                self?.showAutomationRequiredAlert()
             }
         }
     }
 
-    private func showSwitchPermissionAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Allow OSX Desk Notch to switch desktops"
-        alert.informativeText = """
-            macOS needs to authorise the keystroke OSX Desk Notch uses \
-            (Control + Arrow). When you click "Try Again", a system \
-            prompt will appear asking you to allow control of \
-            "System Events" — choose Allow.
+    private func showAccessibilityRequiredAlert() {
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.osxdesknotch.OSXDeskNotch"
+        let resetCommand = "tccutil reset Accessibility \(bundleID)"
 
-            If you previously denied that prompt, open \
-            System Settings → Privacy & Security → Automation and enable \
-            "System Events" under OSX Desk Notch.
+        let alert = NSAlert()
+        alert.messageText = "Re-grant Accessibility for OSX Desk Notch"
+        alert.informativeText = """
+            macOS blocked the keystroke because the Accessibility entry \
+            for this build is stale. (This is a common Xcode dev-build \
+            issue — every rebuild changes the binary's code signature \
+            and invalidates the TCC entry even though the checkbox \
+            still shows it as on.)
+
+            Fix it once:
+
+            1. Click "Open Accessibility Settings" below.
+            2. Find OSX Desk Notch in the list and click the – button \
+               to REMOVE the existing entry (don't just toggle off).
+            3. Quit and rebuild this app (Stop ▢, then ⌘R in Xcode).
+            4. Click any desktop tile again — macOS will prompt for \
+               Accessibility, click Allow, and switching will work.
+
+            If macOS won't show the – button, use the "Copy reset \
+            command" option below and paste it into Terminal.
+            """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open Accessibility Settings")
+        alert.addButton(withTitle: "Copy reset command")
+        alert.addButton(withTitle: "Cancel")
+
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        switch response {
+        case .alertFirstButtonReturn:
+            AccessibilityPermission.openSettings()
+        case .alertSecondButtonReturn:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(resetCommand, forType: .string)
+        default:
+            break
+        }
+    }
+
+    private func showAutomationRequiredAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Allow OSX Desk Notch to control System Events"
+        alert.informativeText = """
+            OSX Desk Notch sends Control+Arrow via System Events to switch \
+            desktops. You previously denied that prompt, so it's now \
+            disabled.
+
+            Open System Settings → Privacy & Security → Automation, \
+            expand OSX Desk Notch, and enable the System Events toggle.
             """
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Open Automation Settings")
