@@ -26,22 +26,13 @@ enum AutomationPermission {
     }
 
     static func statusForBundleID(_ bundleID: String) -> Status {
-        var address = AEAddressDesc()
-        let createStatus = bundleID.withCString { ptr -> OSStatus in
-            AECreateDesc(
-                DescType(typeApplicationBundleID),
-                UnsafeRawPointer(ptr),
-                bundleID.utf8.count,
-                &address
-            )
-        }
-        guard createStatus == noErr else { return .notDetermined }
-        defer { AEDisposeDesc(&address) }
+        let target = NSAppleEventDescriptor(bundleIdentifier: bundleID)
+        guard let addressPtr = target.aeDesc else { return .notDetermined }
 
         // Passing `false` for `askUserIfNeeded` gives us the cached TCC
-        // state without prompting.
+        // state without prompting the user.
         let status = AEDeterminePermissionToAutomateTarget(
-            &address,
+            addressPtr,
             typeWildCard,
             typeWildCard,
             false
